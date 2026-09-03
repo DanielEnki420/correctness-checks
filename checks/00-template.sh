@@ -1,8 +1,7 @@
 #!/bin/bash
 # TEMPLATE — copy this to start a new correctness check.
 #
-# The rule that makes a check worth having:
-#   Do not ask "does it respond?" — ask "does it still do its job?"
+# Don't ask whether it responds. Ask whether it still does its job.
 #
 set -uo pipefail
 . "$(dirname "$0")/../lib/common.sh"

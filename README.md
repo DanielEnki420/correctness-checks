@@ -30,24 +30,38 @@ partway through, so `tar` aborted — but it had already written the files it
 *could* read. The result was a structurally perfect archive missing the one
 file worth backing up. `tar -tzf` returns 0 for that. Nine days of green.
 
-## The rule
+## What the checks actually do
 
-> **Do the real work the service exists for, then assert on the result.**
+The short version: do the real work the service exists for, then check what came
+back.
 
-Concretely, for each check:
+That means logging in, not testing whether the port accepts a connection.
+Resolving a name and looking at the answer, not confirming the resolver is
+listening. Listing an archive and looking for a specific file inside it. Health
+endpoints are worse than useless here — plenty of them return a hardcoded
+`{"ok":true}` that stays true while the database behind them is gone.
 
-1. **Perform the actual operation** — log in, resolve a name, read a row,
-   list an archive. Not a health endpoint.
-2. **Assert on the outcome, not the status code.** `HTTP 200` and `{"ok":true}`
-   are not evidence.
-3. **Test the negative too.** A DNSSEC validator that accepts a knowingly
-   broken signature passes a positive-only test while protecting nothing.
-4. **"Cannot verify" is a failure.** Every path that cannot reach a verdict
-   must fail loudly. Silently skipping unparseable output is how a check
-   starts lying.
-5. **Push success as well as failure.** With a push monitor, the *absence* of a
-   success push turns the monitor red on its own. That makes every check a
-   dead man's switch: if the script stops running at all, you find out.
+Testing the negative case matters as much as the positive one, and it's the part
+I keep seeing skipped. A DNSSEC validator that happily accepts a knowingly broken
+signature will pass any positive-only test you write, while protecting exactly
+nothing. So the DNSSEC check here queries `dnssec-failed.org` and fails if it
+does *not* get SERVFAIL back. Same idea in the blocking check: it verifies the
+blocklist blocks, and then verifies a control domain still resolves — because a
+resolver that blocks everything would sail through the first half.
+
+The rule I'd argue hardest for, though, is this one: **if you can't verify it,
+that's a failure.** Not a skip, not a warning. If the SMART output changes format
+and a field goes missing, the check fails and says so. If a command times out,
+the check fails. It's tempting to let those cases through — they're not really
+errors, after all, the disk is probably fine — but that's exactly the habit that
+produced my nine days of empty backups. A check that quietly gives up while
+reporting green is worse than no check at all, because now you trust it.
+
+One last thing, and it's free: push on success too, not just failure. A push
+monitor goes red when heartbeats stop arriving, so a check that reports its
+successes is automatically a dead man's switch. If the script gets removed from
+cron, or the box it runs on dies, the monitor tells you. That property came in
+useful faster than I expected.
 
 ## Included checks
 
